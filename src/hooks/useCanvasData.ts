@@ -91,7 +91,9 @@ export const useCanvasData = () => {
   const handleNodeDragStop = useCallback(async (event: any, node: Node) => {
     if (!user) return;
 
-    const [nodeType, nodeId] = node.id.split('-');
+    const match = node.id.match(/^(lead|property)-(.+)$/);
+    const nodeType = match ? match[1] : '';
+    const nodeId = match ? match[2] : '';
     
     try {
       const { error } = await supabase
@@ -121,14 +123,26 @@ export const useCanvasData = () => {
   const onConnect = useCallback(async (params: Connection) => {
     if (!user || !params.source || !params.target) return;
 
-    // Extract IDs from node IDs
-    const sourceId = params.source.split('-')[1];
-    const targetId = params.target.split('-')[1];
-    
-    // Determine which is lead and which is property
+    // Extrai o UUID completo do node id
+    const sourceId = params.source.replace(/^lead-|^property-/, '');
+    const targetId = params.target.replace(/^lead-|^property-/, '');
+
+    // Determina qual é lead e qual é property
     const isSourceLead = params.source.startsWith('lead-');
     const leadId = isSourceLead ? sourceId : targetId;
     const propertyId = isSourceLead ? targetId : sourceId;
+
+    // Verifica se os IDs existem nas listas carregadas
+    const leadExists = leads.some(l => l.id === leadId);
+    const propertyExists = properties.some(p => p.id === propertyId);
+    if (!leadExists || !propertyExists) {
+      toast({
+        title: "Erro",
+        description: "Lead ou imóvel não encontrado. Atualize a página.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Check if connection already exists
     const existingConnection = edges.find(edge => 
@@ -174,15 +188,17 @@ export const useCanvasData = () => {
         variant: "destructive",
       });
     }
-  }, [user, setEdges, edges]);
+  }, [user, setEdges, edges, leads, properties]);
 
   // Handle edge deletion
   const onEdgesDelete = useCallback(async (edgesToDelete: Edge[]) => {
     if (!user) return;
 
     for (const edge of edgesToDelete) {
-      const leadId = edge.source.split('-')[1];
-      const propertyId = edge.target.split('-')[1];
+      const leadMatch = edge.source.match(/^lead-(.+)$/) || edge.target.match(/^lead-(.+)$/);
+      const propertyMatch = edge.source.match(/^property-(.+)$/) || edge.target.match(/^property-(.+)$/);
+      const leadId = leadMatch ? leadMatch[1] : '';
+      const propertyId = propertyMatch ? propertyMatch[1] : '';
 
       try {
         const { error } = await supabase
@@ -192,6 +208,9 @@ export const useCanvasData = () => {
           .eq('property_id', propertyId);
 
         if (error) throw error;
+
+        // Remove edge do estado local imediatamente
+        setEdges(eds => eds.filter(e => e.id !== edge.id));
       } catch (error) {
         console.error('Error deleting connection:', error);
         toast({

@@ -1,9 +1,11 @@
 import React from 'react';
+import { X } from 'lucide-react';
 import {
   ReactFlow,
   Controls,
   Background,
   MiniMap,
+  EdgeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,48 @@ import { useCanvasData } from "@/hooks/useCanvasData";
 const nodeTypes = {
   lead: LeadNode,
   property: PropertyNode,
+};
+
+// Edge customizado com botão de exclusão, tipado para React Flow
+const DeletableEdge: React.FC<EdgeProps> = ({ id, sourceX, sourceY, targetX, targetY, selected, data }) => {
+  const centerX = (sourceX + targetX) / 2;
+  const centerY = (sourceY + targetY) / 2;
+  return (
+    <g>
+      <path
+        d={`M${sourceX},${sourceY} C${sourceX + 50},${sourceY} ${targetX - 50},${targetY} ${targetX},${targetY}`}
+        stroke="#0ff"
+        strokeWidth={2}
+        fill="none"
+      />
+      <foreignObject x={centerX - 12} y={centerY - 12} width={24} height={24} style={{ overflow: 'visible' }}>
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            if (data && data.onDelete) data.onDelete(id);
+          }}
+          style={{
+            background: '#fff',
+            border: '1px solid #0ff',
+            borderRadius: '50%',
+            width: 24,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: selected ? '0 0 0 2px #0ff' : undefined,
+          }}
+        >
+          <X size={16} color="#0ff" />
+        </button>
+      </foreignObject>
+    </g>
+  );
+};
+
+const edgeTypes = {
+  deletable: DeletableEdge,
 };
 
 export default function Conexoes() {
@@ -30,6 +74,24 @@ export default function Conexoes() {
     loadData,
     isLoading,
   } = useCanvasData();
+
+  // Adiciona função de deletar edge ao clicar no botão
+  const handleDeleteEdge = React.useCallback(
+    (id: string) => {
+      const edge = edges.find(e => e.id === id);
+      if (edge) {
+        onEdgesDelete([edge]);
+      }
+    },
+    [edges, onEdgesDelete]
+  );
+
+  // Adiciona data.onDelete em cada edge
+  const edgesWithDelete = React.useMemo(() => edges.map(edge => ({
+    ...edge,
+    type: 'deletable',
+    data: { ...(edge.data || {}), onDelete: handleDeleteEdge },
+  })), [edges, handleDeleteEdge]);
 
   if (isLoading) {
     return (
@@ -61,13 +123,14 @@ export default function Conexoes() {
       <div className="flex-1" style={{ height: 'calc(100vh - 140px)' }}>
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={edgesWithDelete}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeDragStop={handleNodeDragStop}
           onEdgesDelete={onEdgesDelete}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           className="bg-background"
         >
